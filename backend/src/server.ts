@@ -94,13 +94,6 @@ const shutdown = async (signal: string) => {
 };
 
 (async () => {
-  const result = await pool.query(`
-    SELECT
-      current_database() AS db,
-      current_user AS user
-  `);
-
-  console.log(result.rows[0]);
   startAutoApprovalJob();
 })();
 

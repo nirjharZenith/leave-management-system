@@ -29,12 +29,6 @@ export default function LoginPage() {
     }
   };
 
-  const demoCredentials = [
-    { role: 'Admin', email: 'admin@company.com', password: 'admin123' },
-    { role: 'Manager', email: 'manager@company.com', password: 'manager123' },
-    { role: 'Employee', email: 'employee@company.com', password: 'emp123' },
-  ];
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -104,30 +98,7 @@ export default function LoginPage() {
               {isLoading ? 'Signing in...' : 'Sign In'}
             </Button>
           </form>
-
-          {/* Demo Credentials */}
-          <div className="mt-8 pt-8 border-t border-slate-700">
-            <p className="text-xs font-semibold text-slate-300 mb-4 uppercase tracking-wider">Demo Credentials</p>
-            <div className="grid gap-3">
-              {demoCredentials.map((cred) => (
-                <div key={cred.email} className="p-3 bg-slate-700/50 border border-slate-600 rounded-lg cursor-pointer hover:bg-slate-700 transition group" onClick={() => { setEmail(cred.email); setPassword(cred.password); }}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-medium text-slate-300">{cred.role}</p>
-                      <p className="text-xs text-slate-400 font-mono mt-1">{cred.email}</p>
-                    </div>
-                    <div className="text-xs text-slate-500 group-hover:text-blue-400 transition">→</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
-
-        {/* Footer Info */}
-        <p className="text-center text-slate-400 text-xs mt-8">
-          For demo purposes only. Use the credentials above to sign in.
-        </p>
       </div>
     </div>
   );

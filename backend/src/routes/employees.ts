@@ -112,13 +112,37 @@ router.get(
   authorizeRole('admin', 'manager'),
   async (req: AuthenticatedRequest, res: Response, next: any) => {
     try {
-      const result = await query(
-        `SELECT e.id, e.name, r.name AS role, e.department,
-                e.manager_id, e.reporting_manager_id
-         FROM employees e
-         JOIN roles r ON e.role_id = r.id
-         ORDER BY e.id ASC`
-      );
+      const { id: userId, role: userRole } = req.user!;
+      let result;
+
+      if (userRole === 'manager') {
+        const client = await pool.connect();
+        try {
+          const subtreeIds = await getSubtreeEmployeeIds(userId, client);
+          const visibleIds = [userId, ...subtreeIds];
+          
+          result = await client.query(
+            `SELECT e.id, e.name, r.name AS role, e.department,
+                    e.manager_id, e.reporting_manager_id
+             FROM employees e
+             JOIN roles r ON e.role_id = r.id
+             WHERE e.id = ANY($1::int[])
+             ORDER BY e.id ASC`,
+            [visibleIds]
+          );
+        } finally {
+          client.release();
+        }
+      } else {
+        // Admin
+        result = await query(
+          `SELECT e.id, e.name, r.name AS role, e.department,
+                  e.manager_id, e.reporting_manager_id
+           FROM employees e
+           JOIN roles r ON e.role_id = r.id
+           ORDER BY e.id ASC`
+        );
+      }
 
       if (result.rows.length === 0) {
         return res.json([]);
