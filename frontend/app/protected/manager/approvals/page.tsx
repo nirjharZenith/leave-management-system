@@ -1,130 +1,164 @@
 'use client';
 
 import { useState } from 'react';
-import { useAuth } from '@/lib/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import axios from 'axios';
-import Cookies from 'js-cookie';
-import useSWR from 'swr';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.1.101:5000';
-
-const fetcher = async (url: string) => {
-  const token = Cookies.get('authToken');
-  const response = await axios.get(url, {
-    baseURL: API_BASE_URL,
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-  return response.data;
-};
+import RoleGuard from '@/components/RoleGuard';
+import { leaveAPI } from '@/lib/api';
+import { useLeaves } from '@/lib/hooks/useApi';
+import { formatDate, mapLeave } from '@/lib/utils/format';
+import { CheckSquare, X } from 'lucide-react';
 
 export default function ManagerApprovalsPage() {
-  const { user } = useAuth();
-  const { data: leaves = [], mutate } = useSWR('/api/leaves', fetcher);
-  const [processingId, setProcessingId] = useState<number | null>(null);
+  return (
+    <RoleGuard allowedRoles={['manager']}>
+      <ApprovalsContent />
+    </RoleGuard>
+  );
+}
 
-  const pendingLeaves = leaves.filter((leave: any) => leave.status === 'Pending');
+function ApprovalsContent() {
+  const { leaves: rawLeaves, isLoading, mutate } = useLeaves();
+  const [processingId, setProcessingId] = useState<number | null>(null);
+  const [error, setError] = useState('');
+
+  const leaves = (rawLeaves ?? []).map((l: Record<string, unknown>) => mapLeave(l));
+  const pendingLeaves = leaves.filter((leave:any) => leave.status === 'Pending');
+  const processedLeaves = leaves.filter((leave:any) => leave.status !== 'Pending');
 
   const handleApprove = async (leaveId: number) => {
     setProcessingId(leaveId);
+    setError('');
     try {
-      const token = Cookies.get('authToken');
-      await axios.put(
-        `${API_BASE_URL}/api/leaves/${leaveId}`,
-        { status: 'Approved' },
-        {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        }
-      );
+      await leaveAPI.update(leaveId, { status: 'Approved' });
       mutate();
-    } catch (error) {
-      console.error('Failed to approve leave:', error);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to approve leave');
     } finally {
       setProcessingId(null);
     }
   };
 
   const handleReject = async (leaveId: number, rejectionReason: string) => {
-    if (!rejectionReason.trim()) {
-      alert('Please provide a rejection reason');
+    if (!rejectionReason.trim() || rejectionReason.trim().length < 5) {
+      setError('Rejection reason must be at least 5 characters');
       return;
     }
 
     setProcessingId(leaveId);
+    setError('');
     try {
-      const token = Cookies.get('authToken');
-      await axios.put(
-        `${API_BASE_URL}/api/leaves/${leaveId}`,
-        { status: 'Rejected', rejectionReason },
-        {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        }
-      );
+      await leaveAPI.update(leaveId, {
+        status: 'Rejected',
+        rejection_reason: rejectionReason.trim(),
+      });
       mutate();
-    } catch (error) {
-      console.error('Failed to reject leave:', error);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to reject leave');
     } finally {
       setProcessingId(null);
     }
   };
 
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  };
-
   return (
     <div className="max-w-6xl mx-auto">
-      <h1 className="text-3xl font-bold text-gray-800 mb-2">Leave Approvals</h1>
-      <p className="text-gray-600 mb-6">Manage leave requests from your team members</p>
+      <div className="flex items-center gap-3 mb-2">
+        <div className="p-2 bg-emerald-100 rounded-lg">
+          <CheckSquare className="w-6 h-6 text-emerald-600" />
+        </div>
+        <h1 className="text-3xl font-bold text-gray-900">Leave Approvals</h1>
+      </div>
+      <p className="text-gray-600 mb-8">Review and manage leave requests from your team</p>
 
-      <div className="bg-white rounded-lg shadow-md overflow-hidden">
-        {pendingLeaves.length === 0 ? (
-          <div className="p-6 text-center text-gray-600">
-            No pending leave requests at the moment.
+      {error && (
+        <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8 ">
+        <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
+          <p className="text-sm text-gray-500">Pending</p>
+          <p className="text-3xl font-bold text-amber-600 mt-1">{pendingLeaves.length}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
+          <p className="text-sm text-gray-500">Approved</p>
+          <p className="text-3xl font-bold text-emerald-600 mt-1">
+            {processedLeaves.filter((l:any) => l.status === 'Approved').length}
+          </p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
+          <p className="text-sm text-gray-500">Rejected</p>
+          <p className="text-3xl font-bold text-red-600 mt-1">
+            {processedLeaves.filter((l:any) => l.status === 'Rejected').length}
+          </p>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100">
+          <h2 className="text-lg font-semibold text-gray-900">Pending Requests</h2>
+        </div>
+
+        {isLoading ? (
+          <div className="p-12 text-center">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+          </div>
+        ) : pendingLeaves.length === 0 ? (
+          <div className="p-12 text-center text-gray-500">
+            <CheckSquare className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+            <p className="font-medium">No pending requests</p>
+            <p className="text-sm mt-1">All caught up! New requests will appear here.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className="bg-gray-50/80 border-b border-gray-100">
                 <tr>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Employee</th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Start Date</th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">End Date</th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Type</th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Reason</th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Employee</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Dates</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Type</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Reason</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
-                {pendingLeaves.map((leave: any) => (
-                  <tr key={leave.id} className="hover:bg-gray-50 transition">
-                    <td className="px-6 py-4 text-sm font-medium text-gray-800">{leave.employeeName || 'Unknown'}</td>
-                    <td className="px-6 py-4 text-sm text-gray-800">{formatDate(leave.startDate)}</td>
-                    <td className="px-6 py-4 text-sm text-gray-800">{formatDate(leave.endDate)}</td>
-                    <td className="px-6 py-4 text-sm text-gray-800">{leave.type}</td>
-                    <td className="px-6 py-4 text-sm text-gray-800">{leave.reason}</td>
-                    <td className="px-6 py-4 text-sm space-x-2 flex">
-                      <Button
-                        onClick={() => handleApprove(leave.id)}
-                        disabled={processingId === leave.id}
-                        className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded transition text-xs"
-                      >
-                        {processingId === leave.id ? 'Processing...' : 'Approve'}
-                      </Button>
-                      <Button
-                        onClick={() => {
-                          const reason = prompt('Enter rejection reason:');
-                          if (reason) handleReject(leave.id, reason);
-                        }}
-                        disabled={processingId === leave.id}
-                        className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded transition text-xs"
-                      >
-                        Reject
-                      </Button>
+              <tbody className="divide-y divide-gray-100">
+                {pendingLeaves.map((leave:any) => (
+                  <tr key={leave.id} className="hover:bg-gray-50/50 transition">
+                    <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                      {leave.employeeName || 'Unknown'}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600">
+                      {formatDate(leave.startDate)} — {formatDate(leave.endDate)}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                        {leave.type}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate">
+                      {leave.reason}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={() => handleApprove(leave.id)}
+                          disabled={processingId === leave.id}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium"
+                        >
+                          {processingId === leave.id ? '...' : 'Approve'}
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            const reason = prompt('Enter rejection reason (min 5 characters):');
+                            if (reason) handleReject(leave.id, reason);
+                          }}
+                          disabled={processingId === leave.id}
+                          className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 px-3 py-1.5 rounded-lg text-xs font-medium"
+                        >
+                          <X className="w-3 h-3 mr-1 inline" />
+                          Reject
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}

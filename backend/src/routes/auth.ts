@@ -45,6 +45,7 @@ router.post('/login', authLimiter, async (req: any, res: Response, next: any) =>
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
+      path: '/',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
@@ -80,7 +81,7 @@ router.get('/me', authenticateToken, async (req: AuthenticatedRequest, res: Resp
 
 // ── POST /api/auth/logout ─────────────────────────────────────────────────────
 router.post('/logout', (_req, res: Response) => {
-  res.clearCookie('authToken');
+  res.clearCookie('authToken', { path: '/' });
   res.json({ message: 'Logged out successfully' });
 });
 

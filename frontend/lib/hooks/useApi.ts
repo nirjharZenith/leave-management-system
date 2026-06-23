@@ -1,27 +1,17 @@
 'use client';
 
 import useSWR from 'swr';
-import axios from 'axios';
+import apiClient from '@/lib/api';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { OrgNode, Leave } from '@/lib/types';
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://192.168.1.101:5000';
-
-const fetcher = async (url: string) => {
-  const response = await axios.get(`${API_BASE_URL}${url}`, {
-    withCredentials: true,
-  });
-
-  return response.data;
-};
+const fetcher = (url: string) => apiClient.get(url);
 
 export function useLeaves() {
   const { isAuthenticated, user } = useAuth();
 
   const endpoint =
-    user?.role === 'employee'
-      ? '/api/leaves/mine'
-      : '/api/leaves';
+    user?.role === 'employee' ? '/api/leaves/user/mine' : '/api/leaves';
 
   const { data, error, isLoading, mutate } = useSWR(
     isAuthenticated ? endpoint : null,
@@ -40,7 +30,7 @@ export function useEmployees() {
   const { user } = useAuth();
 
   const { data, error, isLoading, mutate } = useSWR(
-    user?.role === 'admin' ? '/api/employees' : null,
+    user?.role === 'admin' || user?.role === 'manager' ? '/api/employees' : null,
     fetcher
   );
 
@@ -62,6 +52,37 @@ export function useHolidays() {
 
   return {
     holidays: data ?? [],
+    isLoading,
+    error,
+    mutate,
+  };
+}
+
+export function useHierarchy() {
+  const { isAuthenticated } = useAuth();
+  const { data, error, isLoading, mutate } = useSWR(
+    isAuthenticated ? '/api/employees/hierarchy' : null,
+    fetcher
+  );
+  return {
+    hierarchy: (data ?? []) as OrgNode[],
+    isLoading,
+    error,
+    mutate,
+  };
+}
+
+export function usePendingForMe() {
+  const { isAuthenticated } = useAuth();
+  const { data, error, isLoading, mutate } = useSWR(
+    isAuthenticated ? '/api/leaves/pending-for-me' : null,
+    fetcher,
+    { refreshInterval: 30_000 }
+  );
+  const leaves = (data ?? []) as Leave[];
+  return {
+    pendingLeaves: leaves,
+    pendingCount: leaves.length,
     isLoading,
     error,
     mutate,

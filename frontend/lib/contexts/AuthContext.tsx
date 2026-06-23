@@ -1,8 +1,9 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { User } from "@/types";
+import { API_BASE_URL } from "@/lib/utils/format";
 
 interface AuthContextType {
 	user: User | null;
@@ -14,20 +15,14 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
 	const [user, setUser] = useState<User | null>(null);
 	const [loading, setLoading] = useState(true);
 	const router = useRouter();
 
-	useEffect(() => {
-		checkAuth();
-	}, []);
-
-	const checkAuth = async () => {
+	const checkAuth = useCallback(async () => {
 		try {
-			const response = await fetch(`${API_URL}/api/auth/me`, {
+			const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
 				method: "GET",
 				credentials: "include",
 				headers: { "Content-Type": "application/json" },
@@ -36,19 +31,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 			if (response.ok) {
 				const data = await response.json();
 				setUser(data.user);
+			} else {
+				setUser(null);
 			}
 		} catch (error) {
-			console.error("[v0] Auth check failed:", error);
+			console.error("Auth check failed:", error);
 			setUser(null);
 		} finally {
 			setLoading(false);
 		}
-	};
+	}, []);
+
+	useEffect(() => {
+		checkAuth();
+	}, [checkAuth]);
 
 	const login = async (email: string, password: string) => {
 		setLoading(true);
 		try {
-			const response = await fetch(`${API_URL}/api/auth/login`, {
+			const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
 				method: "POST",
 				credentials: "include",
 				headers: { "Content-Type": "application/json" },
@@ -81,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 	const logout = async () => {
 		try {
-			await fetch(`${API_URL}/api/auth/logout`, {
+			await fetch(`${API_BASE_URL}/api/auth/logout`, {
 				method: "POST",
 				credentials: "include",
 			});

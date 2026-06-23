@@ -26,15 +26,17 @@ const initializeDatabase = async () => {
     // ── employees ─────────────────────────────────────────────────────────────
     await client.query(`
       CREATE TABLE IF NOT EXISTS employees (
-        id            SERIAL PRIMARY KEY,
-        email         VARCHAR(255) UNIQUE NOT NULL,
-        password_hash VARCHAR(255) NOT NULL,
-        name          VARCHAR(255) NOT NULL,
-        role_id       INTEGER NOT NULL REFERENCES roles(id),
-        manager_id    INTEGER REFERENCES employees(id),
-        department    VARCHAR(100),
-        created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        id                   SERIAL PRIMARY KEY,
+        email                VARCHAR(255) UNIQUE NOT NULL,
+        password_hash        VARCHAR(255) NOT NULL,
+        name                 VARCHAR(255) NOT NULL,
+        role_id              INTEGER NOT NULL REFERENCES roles(id),
+        manager_id           INTEGER REFERENCES employees(id),
+        department           VARCHAR(100),
+        created_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        reporting_manager_id INTEGER REFERENCES employees(id),
+        approval_opt_in      BOOLEAN NOT NULL DEFAULT TRUE
       );
     `);
     console.log('✅ employees table');
@@ -42,17 +44,21 @@ const initializeDatabase = async () => {
     // ── leaves ────────────────────────────────────────────────────────────────
     await client.query(`
       CREATE TABLE IF NOT EXISTS leaves (
-        id               SERIAL PRIMARY KEY,
-        employee_id      INTEGER NOT NULL REFERENCES employees(id),
-        start_date       DATE NOT NULL,
-        end_date         DATE NOT NULL,
-        reason           TEXT NOT NULL,
-        type             VARCHAR(50) NOT NULL,
-        status           VARCHAR(50) DEFAULT 'Pending',
-        approved_by      INTEGER REFERENCES employees(id),
-        rejection_reason TEXT,
-        created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        id                      SERIAL PRIMARY KEY,
+        employee_id             INTEGER NOT NULL REFERENCES employees(id),
+        start_date              DATE NOT NULL,
+        end_date                DATE NOT NULL,
+        reason                  TEXT NOT NULL,
+        type                    VARCHAR(50) NOT NULL,
+        status                  VARCHAR(50) DEFAULT 'Pending',
+        approved_by             INTEGER REFERENCES employees(id),
+        rejection_reason        TEXT,
+        created_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        current_approver_id     INTEGER REFERENCES employees(id),
+        approval_chain_snapshot JSONB,
+        approved_at             TIMESTAMP,
+        rejected_at             TIMESTAMP
       );
     `);
     console.log('✅ leaves table');
@@ -72,10 +78,12 @@ const initializeDatabase = async () => {
 
     // ── indexes ───────────────────────────────────────────────────────────────
     await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_employees_role_id    ON employees(role_id);
-      CREATE INDEX IF NOT EXISTS idx_employees_manager_id ON employees(manager_id);
-      CREATE INDEX IF NOT EXISTS idx_leaves_employee_id   ON leaves(employee_id);
-      CREATE INDEX IF NOT EXISTS idx_leaves_status        ON leaves(status);
+      CREATE INDEX IF NOT EXISTS idx_employees_role_id             ON employees(role_id);
+      CREATE INDEX IF NOT EXISTS idx_employees_manager_id          ON employees(manager_id);
+      CREATE INDEX IF NOT EXISTS idx_employees_reporting_manager_id ON employees(reporting_manager_id);
+      CREATE INDEX IF NOT EXISTS idx_leaves_employee_id            ON leaves(employee_id);
+      CREATE INDEX IF NOT EXISTS idx_leaves_status                 ON leaves(status);
+      CREATE INDEX IF NOT EXISTS idx_leaves_current_approver_id    ON leaves(current_approver_id);
     `);
     console.log('✅ indexes');
 
@@ -122,6 +130,28 @@ const initializeDatabase = async () => {
         [u.email, u.hash, u.name, roleRes.rows[0].id, u.dept]
       );
       console.log(`✅ ${u.role}: ${u.email} / ${u.plain}`);
+    }
+
+    // Link employee to manager for approval workflow
+    const managerRes = await client.query(
+      `SELECT id FROM employees WHERE email = 'manager@company.com'`
+    );
+    const employeeRes = await client.query(
+      `SELECT id FROM employees WHERE email = 'employee@company.com'`
+    );
+    if (managerRes.rows[0] && employeeRes.rows[0]) {
+      await client.query(
+        `UPDATE employees SET manager_id = $1 WHERE id = $2`,
+        [managerRes.rows[0].id, employeeRes.rows[0].id]
+      );
+      console.log('✅ employee linked to manager');
+
+      // Also set reporting_manager_id to demonstrate the feature in seed data
+      await client.query(
+        `UPDATE employees SET reporting_manager_id = $1 WHERE id = $2`,
+        [managerRes.rows[0].id, employeeRes.rows[0].id]
+      );
+      console.log('✅ employee reporting_manager_id set to manager');
     }
 
     // ── seed holidays ─────────────────────────────────────────────────────────

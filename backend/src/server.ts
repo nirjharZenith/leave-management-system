@@ -5,7 +5,6 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { errorHandler } from './middleware/errorHandler';
-import { authLimiter } from './middleware/rateLimiter';
 // Load env first before anything else
 dotenv.config();
 
@@ -14,6 +13,7 @@ import employeeRoutes from './routes/employees';
 import leaveRoutes from './routes/leaves';
 import holidayRoutes from './routes/holidays';
 import pool from './db/connection';
+import { startAutoApprovalJob } from './jobs/autoApprove';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -25,18 +25,17 @@ app.use(helmet());
 
 // ─── Rate Limiting ────────────────────────────────────────────────────────────
 const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 200,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' },
 });
 
-// Stricter limiter for auth endpoints (brute-force protection)
-app.use(authLimiter);
+app.use(globalLimiter);
 
 // ─── Core Middleware ──────────────────────────────────────────────────────────
-app.use(express.json({ limit: '10kb' })); // Prevent large payload attacks
+app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 app.use(cookieParser());
 app.use(
@@ -45,6 +44,14 @@ app.use(
     credentials: true,
   })
 );
+
+// ─── Request Logger ───────────────────────────────────────────────────────────
+app.use((req, _res, next) => {
+  if (NODE_ENV === 'development') {
+    console.log(`${req.method} ${req.url}`);
+  }
+  next();
+});
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
@@ -62,16 +69,13 @@ app.get('/api/health', async (_req, res) => {
   }
 });
 
-// ─── Error Handling ───────────────────────────────────────────────────────────
-app.use(errorHandler);
-
+// ─── 404 Handler ──────────────────────────────────────────────────────────────
 app.use((_req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
-app.use((req, res, next) => {
-  console.log(`${req.method} ${req.url}`);
-  next();
-});
+
+// ─── Error Handling ───────────────────────────────────────────────────────────
+app.use(errorHandler);
 
 // ─── Start Server ─────────────────────────────────────────────────────────────
 const server = app.listen(PORT, () => {
@@ -97,10 +101,8 @@ const shutdown = async (signal: string) => {
   `);
 
   console.log(result.rows[0]);
+  startAutoApprovalJob();
 })();
-
-
-
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));

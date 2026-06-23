@@ -2,33 +2,30 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import axios from 'axios';
-import Cookies from 'js-cookie';
-import useSWR from 'swr';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.1.101:5000';
-
-const fetcher = async (url: string) => {
-  const token = Cookies.get('authToken');
-  const response = await axios.get(url, {
-    baseURL: API_BASE_URL,
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-  return response.data;
-};
+import RoleGuard from '@/components/RoleGuard';
+import { holidayAPI } from '@/lib/api';
+import { useHolidays } from '@/lib/hooks/useApi';
+import { formatDate } from '@/lib/utils/format';
+import { Calendar } from 'lucide-react';
 
 export default function AdminHolidaysPage() {
-  const { data: holidays = [], mutate } = useSWR('/api/holidays', fetcher);
+  return (
+    <RoleGuard allowedRoles={['admin']}>
+      <HolidaysContent />
+    </RoleGuard>
+  );
+}
+
+function HolidaysContent() {
+  const { holidays, isLoading, mutate } = useHolidays();
   const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState({
-    date: '',
-    name: '',
-    description: '',
-  });
-  const [isLoading, setIsLoading] = useState(false);
+  const [formData, setFormData] = useState({ date: '', name: '', description: '' });
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
@@ -36,21 +33,17 @@ export default function AdminHolidaysPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setIsLoading(true);
+    setIsSubmitting(true);
 
     try {
-      const token = Cookies.get('authToken');
-      await axios.post(`${API_BASE_URL}/api/holidays`, formData, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-
+      await holidayAPI.create(formData);
       setFormData({ date: '', name: '', description: '' });
       setShowForm(false);
       mutate();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to create holiday');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to create holiday');
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -58,46 +51,40 @@ export default function AdminHolidaysPage() {
     if (!confirm('Are you sure you want to delete this holiday?')) return;
 
     try {
-      const token = Cookies.get('authToken');
-      await axios.delete(`${API_BASE_URL}/api/holidays/${holidayId}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      await holidayAPI.delete(holidayId);
       mutate();
-    } catch (error) {
-      console.error('Failed to delete holiday:', error);
+    } catch (err) {
+      console.error('Failed to delete holiday:', err);
     }
-  };
-
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
   };
 
   return (
     <div className="max-w-6xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-800">Manage Holidays</h1>
-          <p className="text-gray-600">Add and manage company holidays</p>
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-indigo-100 rounded-lg">
+              <Calendar className="w-6 h-6 text-indigo-600" />
+            </div>
+            <h1 className="text-3xl font-bold text-gray-900">Manage Holidays</h1>
+          </div>
+          <p className="text-gray-600">Add and manage company-wide holidays</p>
         </div>
         <Button
           onClick={() => setShowForm(!showForm)}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-lg transition"
+          className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-6 rounded-lg transition"
         >
           {showForm ? 'Cancel' : 'Add Holiday'}
         </Button>
       </div>
 
       {showForm && (
-        <div className="bg-white rounded-lg shadow-md p-8 mb-6">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">Add New Holiday</h2>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 mb-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-6">Add New Holiday</h2>
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div>
-                <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1.5">
                   Date
                 </label>
                 <input
@@ -106,13 +93,12 @@ export default function AdminHolidaysPage() {
                   name="date"
                   value={formData.date}
                   onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
                   required
                 />
               </div>
-
               <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1.5">
                   Holiday Name
                 </label>
                 <input
@@ -121,14 +107,13 @@ export default function AdminHolidaysPage() {
                   name="name"
                   value={formData.name}
                   onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
                   required
                 />
               </div>
             </div>
-
             <div>
-              <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1.5">
                 Description (Optional)
               </label>
               <textarea
@@ -137,51 +122,57 @@ export default function AdminHolidaysPage() {
                 value={formData.description}
                 onChange={handleChange}
                 rows={3}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
               />
             </div>
-
-            {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
-
-            <div className="flex gap-4">
-              <Button
-                type="submit"
-                disabled={isLoading}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-lg transition"
-              >
-                {isLoading ? 'Creating...' : 'Create Holiday'}
-              </Button>
-            </div>
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                {error}
+              </div>
+            )}
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-6 rounded-lg"
+            >
+              {isSubmitting ? 'Creating...' : 'Create Holiday'}
+            </Button>
           </form>
         </div>
       )}
 
-      <div className="bg-white rounded-lg shadow-md overflow-hidden">
-        {holidays.length === 0 ? (
-          <div className="p-6 text-center text-gray-600">
-            No holidays found.
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        {isLoading ? (
+          <div className="p-12 text-center">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
           </div>
+        ) : holidays.length === 0 ? (
+          <div className="p-12 text-center text-gray-500">No holidays found.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className="bg-gray-50/80 border-b border-gray-100">
                 <tr>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Date</th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Holiday Name</th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Description</th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Holiday</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Description</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
-                {holidays.map((holiday: any) => (
-                  <tr key={holiday.id} className="hover:bg-gray-50 transition">
-                    <td className="px-6 py-4 text-sm font-medium text-gray-800">{formatDate(holiday.date)}</td>
-                    <td className="px-6 py-4 text-sm text-gray-800">{holiday.name}</td>
-                    <td className="px-6 py-4 text-sm text-gray-800">{holiday.description || '-'}</td>
-                    <td className="px-6 py-4 text-sm">
+              <tbody className="divide-y divide-gray-100">
+                {holidays.map((holiday: Record<string, unknown>) => (
+                  <tr key={holiday.id as number} className="hover:bg-gray-50/50 transition">
+                    <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                      {formatDate(holiday.date as string)}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900">{holiday.name as string}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600">
+                      {(holiday.description as string) || '—'}
+                    </td>
+                    <td className="px-6 py-4">
                       <Button
-                        onClick={() => handleDelete(holiday.id)}
-                        className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded transition text-xs"
+                        onClick={() => handleDelete(holiday.id as number)}
+                        className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 px-3 py-1.5 rounded-lg text-xs font-medium"
                       >
                         Delete
                       </Button>

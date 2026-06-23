@@ -2,128 +2,167 @@
 
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { useLeaves } from "@/lib/hooks/useApi";
-import { Leave } from "@/types";
+import { formatDate, getStatusColor, mapLeave } from "@/lib/utils/format";
 import Link from "next/link";
+import { Calendar, CheckCircle, Clock, XCircle, CalendarPlus } from "lucide-react";
 
 export default function DashboardPage() {
 	const { user } = useAuth();
 	const { leaves: rawLeaves, isLoading } = useLeaves();
 
-	// API returns snake_case; map to camelCase to match the Leave type
-	const leaves: Leave[] = (rawLeaves ?? []).map((l: any) => ({
-		...l,
-		startDate: l.startDate ?? l.start_date,
-		endDate: l.endDate ?? l.end_date,
-	}));
+	const leaves = (rawLeaves ?? []).map((l: Record<string, unknown>) => mapLeave(l));
 
-	const getStatusColor = (status: string) => {
-		switch (status) {
-			case "Approved":
-				return "bg-green-100 text-green-800";
-			case "Rejected":
-				return "bg-red-100 text-red-800";
-			default:
-				return "bg-yellow-100 text-yellow-800";
-		}
-	};
+	const pending = leaves.filter((l) => l.status === "Pending").length;
+	const approved = leaves.filter((l) => l.status === "Approved").length;
+	const rejected = leaves.filter((l) => l.status === "Rejected").length;
 
-	const formatDate = (date: string) => {
-		if (!date) return "—";
-		// Parse YYYY-MM-DD safely without UTC shift
-		const [year, month, day] = date.split("T")[0].split("-").map(Number);
-		const d = new Date(year, month - 1, day);
-		if (isNaN(d.getTime())) return "—";
-		return d.toLocaleDateString("en-US", {
-			year: "numeric",
-			month: "short",
-			day: "numeric",
-		});
-	};
-
+	const stats = [
+		{ label: "Pending", value: pending, icon: Clock, color: "text-amber-600", bg: "bg-amber-50" },
+		{ label: "Approved", value: approved, icon: CheckCircle, color: "text-emerald-600", bg: "bg-emerald-50" },
+		{ label: "Rejected", value: rejected, icon: XCircle, color: "text-red-600", bg: "bg-red-50" },
+	];
 
 	return (
 		<div className="max-w-6xl mx-auto">
 			<div className="mb-8">
-				<h1 className="text-3xl font-bold text-gray-800 mb-2">
-					Welcome, {user?.name}!
+				<h1 className="text-3xl font-bold text-gray-900 mb-1">
+					Welcome back, {user?.name}!
 				</h1>
-				<p className="text-gray-600">
-					Here&apos;s your leave information
+				<p className="text-gray-600 capitalize">
+					{user?.role} dashboard — manage your leave requests
 				</p>
+			</div>
+
+			<div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+				{stats.map((stat) => {
+					const Icon = stat.icon;
+					return (
+						<div
+							key={stat.label}
+							className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm flex items-center gap-4"
+						>
+							<div className={`p-3 rounded-lg ${stat.bg}`}>
+								<Icon className={`w-5 h-5 ${stat.color}`} />
+							</div>
+							<div>
+								<p className="text-sm text-gray-500">{stat.label}</p>
+								<p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
+							</div>
+						</div>
+					);
+				})}
 			</div>
 
 			{user?.role === "employee" && (
 				<div className="mb-6">
 					<Link
 						href="/protected/apply-leave"
-						className="inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-lg transition"
+						className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-6 rounded-lg transition shadow-sm"
 					>
+						<CalendarPlus className="w-4 h-4" />
 						Apply for Leave
 					</Link>
 				</div>
 			)}
 
-			<div className="bg-white rounded-lg shadow-md overflow-hidden">
-				<div className="p-6 border-b border-gray-200">
-					<h2 className="text-xl font-semibold text-gray-800">
-						Leave Requests
-					</h2>
+			{user?.role === "manager" && (
+				<div className="mb-6 flex flex-wrap gap-3">
+					<Link
+						href="/protected/manager/approvals"
+						className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 px-6 rounded-lg transition shadow-sm"
+					>
+						<CheckCircle className="w-4 h-4" />
+						Review Approvals
+						{pending > 0 && (
+							<span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">
+								{pending}
+							</span>
+						)}
+					</Link>
+					<Link
+						href="/protected/manager/employees"
+						className="inline-flex items-center gap-2 border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold py-2.5 px-6 rounded-lg transition"
+					>
+						Manage Team
+					</Link>
+				</div>
+			)}
+
+			<div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+				<div className="p-6 border-b border-gray-100 flex items-center gap-3">
+					<Calendar className="w-5 h-5 text-indigo-600" />
+					<h2 className="text-lg font-semibold text-gray-900">Leave Requests</h2>
 				</div>
 
 				{isLoading ? (
-					<div className="p-6 text-center">
-						<div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-						<p className="mt-4 text-gray-600">
-							Loading leave requests...
-						</p>
+					<div className="p-12 text-center">
+						<div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+						<p className="mt-4 text-gray-500">Loading leave requests...</p>
 					</div>
 				) : leaves.length === 0 ? (
-					<div className="p-6 text-center text-gray-600">
-						No leave requests found.
+					<div className="p-12 text-center text-gray-500">
+						<Calendar className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+						<p className="font-medium">No leave requests yet</p>
+						{user?.role === "employee" && (
+							<p className="text-sm mt-1">
+								<Link href="/protected/apply-leave" className="text-indigo-600 hover:underline">
+									Submit your first request
+								</Link>
+							</p>
+						)}
 					</div>
 				) : (
 					<div className="overflow-x-auto">
 						<table className="w-full">
-							<thead className="bg-gray-50 border-b border-gray-200">
+							<thead className="bg-gray-50/80 border-b border-gray-100">
 								<tr>
-									<th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">
+									{(user?.role === "manager" || user?.role === "admin") && (
+										<th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">
+											Employee
+										</th>
+									)}
+									<th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">
 										Start Date
 									</th>
-									<th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">
+									<th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">
 										End Date
 									</th>
-									<th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">
+									<th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">
 										Type
 									</th>
-									<th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">
+									<th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">
 										Reason
 									</th>
-									<th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">
+									<th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">
 										Status
 									</th>
 								</tr>
 							</thead>
-							<tbody className="divide-y divide-gray-200">
-								{leaves.map((leave: Leave) => (
-									<tr
-										key={leave.id}
-										className="hover:bg-gray-50 transition"
-									>
-										<td className="px-6 py-4 text-sm text-gray-800">
+							<tbody className="divide-y divide-gray-100">
+								{leaves.map((leave) => (
+									<tr key={leave.id} className="hover:bg-gray-50/50 transition">
+										{(user?.role === "manager" || user?.role === "admin") && (
+											<td className="px-6 py-4 text-sm font-medium text-gray-900">
+												{leave.employeeName || "—"}
+											</td>
+										)}
+										<td className="px-6 py-4 text-sm text-gray-600">
 											{formatDate(leave.startDate)}
 										</td>
-										<td className="px-6 py-4 text-sm text-gray-800">
+										<td className="px-6 py-4 text-sm text-gray-600">
 											{formatDate(leave.endDate)}
 										</td>
-										<td className="px-6 py-4 text-sm text-gray-800">
-											{leave.type}
+										<td className="px-6 py-4">
+											<span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+												{leave.type}
+											</span>
 										</td>
-										<td className="px-6 py-4 text-sm text-gray-800">
+										<td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate">
 											{leave.reason}
 										</td>
 										<td className="px-6 py-4">
 											<span
-												className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${getStatusColor(leave.status)}`}
+												className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(leave.status)}`}
 											>
 												{leave.status}
 											</span>

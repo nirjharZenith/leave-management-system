@@ -3,10 +3,10 @@
 import RoleGuard from '@/components/RoleGuard';
 import EmployeesPanel from '@/components/EmployeesPanel';
 
-export default function AdminEmployeesPage() {
+export default function ManagerEmployeesPage() {
   return (
-    <RoleGuard allowedRoles={['admin']}>
-      <EmployeesPanel mode="admin" />
+    <RoleGuard allowedRoles={['manager']}>
+      <EmployeesPanel mode="manager" />
     </RoleGuard>
   );
 }
