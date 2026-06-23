@@ -31,7 +31,7 @@ router.post('/login', authLimiter, async (req: any, res: Response, next: any) =>
 
     // Use constant-time comparison path regardless of user existence
     // to prevent user enumeration via timing attacks
-    const passwordHash = user?.password_hash || '$2a$10$invalidhashtopreventtiming000000000000000000000';
+    const passwordHash = user?.password_hash || '$2a$10$3n/n2vduyyjxY0Vn3t2KXeQdM37lqXtmEkjk8xCHXAJQaVVyFPKU.';
     const passwordMatch = await verifyPassword(password, passwordHash);
 
     if (!user || !passwordMatch) {

@@ -12,9 +12,9 @@ export default function DashboardPage() {
 
 	const leaves = (rawLeaves ?? []).map((l: Record<string, unknown>) => mapLeave(l));
 
-	const pending = leaves.filter((l) => l.status === "Pending").length;
-	const approved = leaves.filter((l) => l.status === "Approved").length;
-	const rejected = leaves.filter((l) => l.status === "Rejected").length;
+	const pending = leaves.filter((l: any) => l.status === "Pending").length;
+	const approved = leaves.filter((l: any) => l.status === "Approved").length;
+	const rejected = leaves.filter((l: any) => l.status === "Rejected").length;
 
 	const stats = [
 		{ label: "Pending", value: pending, icon: Clock, color: "text-amber-600", bg: "bg-amber-50" },
@@ -139,7 +139,7 @@ export default function DashboardPage() {
 								</tr>
 							</thead>
 							<tbody className="divide-y divide-gray-100">
-								{leaves.map((leave) => (
+								{leaves.map((leave: any) => (
 									<tr key={leave.id} className="hover:bg-gray-50/50 transition">
 										{(user?.role === "manager" || user?.role === "admin") && (
 											<td className="px-6 py-4 text-sm font-medium text-gray-900">

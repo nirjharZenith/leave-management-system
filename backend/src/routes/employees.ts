@@ -391,6 +391,12 @@ router.delete(
       // 1. Reroute any pending approvals assigned to this employee
       await rerouteOptedOutLeaves(id, client);
 
+      // 1.5. Clear remaining current_approver_id references (e.g. Approved leaves or no fallback found)
+      await client.query(
+        `UPDATE leaves SET current_approver_id = NULL WHERE current_approver_id = $1`,
+        [id]
+      );
+
       // 2. Nullify approved_by references for already processed leaves
       await client.query(
         `UPDATE leaves SET approved_by = NULL WHERE approved_by = $1`,

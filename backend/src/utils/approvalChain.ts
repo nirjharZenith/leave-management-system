@@ -131,21 +131,23 @@ export async function rerouteOptedOutLeaves(
       }
     }
 
-    // Fallback to lowest-id admin
+    // Fallback to lowest-id admin that is NOT the optedOutId
     if (!nextApproverId) {
       const adminRow = await client.query(
         `SELECT e.id FROM employees e JOIN roles r ON r.id = e.role_id
-         WHERE r.name = 'admin' ORDER BY e.id ASC LIMIT 1`
+         WHERE r.name = 'admin' AND e.id != $1 ORDER BY e.id ASC LIMIT 1`,
+        [optedOutId]
       );
-      if (adminRow.rows.length > 0) nextApproverId = adminRow.rows[0].id;
+      if (adminRow.rows.length > 0) {
+        nextApproverId = adminRow.rows[0].id;
+      }
     }
 
-    if (nextApproverId) {
-      await client.query(
-        `UPDATE leaves SET current_approver_id = $1 WHERE id = $2`,
-        [nextApproverId, row.id]
-      );
-    }
+    // Update to new approver, or NULL if none exist
+    await client.query(
+      `UPDATE leaves SET current_approver_id = $1 WHERE id = $2`,
+      [nextApproverId, row.id]
+    );
   }
 }
 

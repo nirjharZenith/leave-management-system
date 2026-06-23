@@ -162,11 +162,11 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Respo
 
     await client.query('BEGIN');
 
-    // Check for date overlap with existing Pending leaves
+    // Check for date overlap with existing Pending or Approved leaves
     const overlapResult = await client.query(
       `SELECT id FROM leaves
        WHERE employee_id = $1
-         AND status = 'Pending'
+         AND status IN ('Pending', 'Approved')
          AND start_date <= $3::date
          AND end_date >= $2::date`,
       [employeeId, data.start_date, data.end_date]
@@ -175,7 +175,7 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Respo
     if (overlapResult.rows.length > 0) {
       await client.query('ROLLBACK');
       client.release();
-      return res.status(409).json({ error: 'Date overlaps with a pending leave request' });
+      return res.status(409).json({ error: 'Date overlaps with a pending or approved leave request' });
     }
 
     // Resolve approval chain

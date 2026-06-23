@@ -27,41 +27,51 @@ apiClient.interceptors.response.use(
   }
 );
 
+export interface ApiClient {
+  get<T = any>(url: string, config?: any): Promise<T>;
+  post<T = any>(url: string, data?: any, config?: any): Promise<T>;
+  put<T = any>(url: string, data?: any, config?: any): Promise<T>;
+  delete<T = any>(url: string, config?: any): Promise<T>;
+  patch<T = any>(url: string, data?: any, config?: any): Promise<T>;
+}
+
+const api = apiClient as unknown as ApiClient;
+
 export const authAPI = {
   login: (email: string, password: string) =>
-    apiClient.post('/api/auth/login', { email, password }),
-  me: () => apiClient.get('/api/auth/me'),
-  logout: () => apiClient.post('/api/auth/logout'),
+    api.post('/api/auth/login', { email, password }),
+  me: () => api.get('/api/auth/me'),
+  logout: () => api.post('/api/auth/logout'),
 };
 
 export const employeeAPI = {
-  getAll: () => apiClient.get('/api/employees'),
-  getById: (id: number) => apiClient.get(`/api/employees/${id}`),
-  create: (data: Record<string, unknown>) => apiClient.post('/api/employees', data),
+  getAll: () => api.get('/api/employees'),
+  getById: (id: number) => api.get(`/api/employees/${id}`),
+  create: (data: Record<string, unknown>) => api.post('/api/employees', data),
   update: (id: number, data: Record<string, unknown>) =>
-    apiClient.put(`/api/employees/${id}`, data),
-  delete: (id: number) => apiClient.delete(`/api/employees/${id}`),
-  getHierarchy: () => apiClient.get('/api/employees/hierarchy'),
+    api.put(`/api/employees/${id}`, data),
+  delete: (id: number) => api.delete(`/api/employees/${id}`),
+  getHierarchy: () => api.get('/api/employees/hierarchy'),
   updateApprovalPreference: (optIn: boolean) =>
-    apiClient.patch('/api/employees/me/approval-preference', { approval_opt_in: optIn }),
+    api.patch('/api/employees/me/approval-preference', { approval_opt_in: optIn }),
 };
 
 export const leaveAPI = {
-  getAll: () => apiClient.get('/api/leaves'),
-  getMine: () => apiClient.get('/api/leaves/user/mine'),
-  getById: (id: number) => apiClient.get(`/api/leaves/${id}`),
-  create: (data: Record<string, unknown>) => apiClient.post('/api/leaves', data),
+  getAll: () => api.get('/api/leaves'),
+  getMine: () => api.get('/api/leaves/user/mine'),
+  getById: (id: number) => api.get(`/api/leaves/${id}`),
+  create: (data: Record<string, unknown>) => api.post('/api/leaves', data),
   update: (id: number, data: Record<string, unknown>) =>
-    apiClient.put(`/api/leaves/${id}`, data),
-  getPendingForMe: () => apiClient.get('/api/leaves/pending-for-me'),
+    api.put(`/api/leaves/${id}`, data),
+  getPendingForMe: () => api.get('/api/leaves/pending-for-me'),
 };
 
 export const holidayAPI = {
-  getAll: () => apiClient.get('/api/holidays'),
-  create: (data: Record<string, unknown>) => apiClient.post('/api/holidays', data),
+  getAll: () => api.get('/api/holidays'),
+  create: (data: Record<string, unknown>) => api.post('/api/holidays', data),
   update: (id: number, data: Record<string, unknown>) =>
-    apiClient.put(`/api/holidays/${id}`, data),
-  delete: (id: number) => apiClient.delete(`/api/holidays/${id}`),
+    api.put(`/api/holidays/${id}`, data),
+  delete: (id: number) => api.delete(`/api/holidays/${id}`),
 };
 
-export default apiClient;
+export default api;
