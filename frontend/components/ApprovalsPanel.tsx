@@ -6,6 +6,7 @@ import { leaveAPI } from '@/lib/api';
 import { formatDate } from '@/lib/utils/format';
 import { CheckSquare, X, AlertCircle } from 'lucide-react';
 import { Leave } from '@/lib/types';
+import RejectionModal from './RejectionModal';
 
 interface ApprovalsPanelProps {
   leaves: Leave[];
@@ -21,9 +22,7 @@ function getDurationDays(startDate: string, endDate: string): number {
 export default function ApprovalsPanel({ leaves, onAction }: ApprovalsPanelProps) {
   const [optimisticLeaves, setOptimisticLeaves] = useState<Leave[]>(leaves);
   const [errorMap, setErrorMap] = useState<Record<number, string>>({});
-  const [rejectingId, setRejectingId] = useState<number | null>(null);
-  const [rejectionReason, setRejectionReason] = useState('');
-  const [reasonError, setReasonError] = useState('');
+  const [selectedLeaveToReject, setSelectedLeaveToReject] = useState<Leave | null>(null);
   const [processingId, setProcessingId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -54,18 +53,14 @@ export default function ApprovalsPanel({ leaves, onAction }: ApprovalsPanelProps
     }
   };
 
-  const handleRejectSubmit = async (leaveId: number) => {
-    if (rejectionReason.length < 5 || rejectionReason.length > 500) {
-      setReasonError('Rejection reason must be between 5 and 500 characters.');
-      return;
-    }
-    setReasonError('');
+  const handleRejectSubmit = async (reason: string) => {
+    if (!selectedLeaveToReject) return;
+    const leaveId = selectedLeaveToReject.id;
     setOptimisticLeaves((prev) => prev.filter((l) => l.id !== leaveId));
-    setRejectingId(null);
-    setRejectionReason('');
+    setErrorMap((prev) => { const n = { ...prev }; delete n[leaveId]; return n; });
     setProcessingId(leaveId);
     try {
-      await leaveAPI.update(leaveId, { status: 'Rejected', rejection_reason: rejectionReason });
+      await leaveAPI.update(leaveId, { status: 'Rejected', rejection_reason: reason });
       onAction();
     } catch (err) {
       setOptimisticLeaves((prev) => {
@@ -79,6 +74,7 @@ export default function ApprovalsPanel({ leaves, onAction }: ApprovalsPanelProps
       }));
     } finally {
       setProcessingId(null);
+      setSelectedLeaveToReject(null);
     }
   };
 
@@ -132,7 +128,7 @@ export default function ApprovalsPanel({ leaves, onAction }: ApprovalsPanelProps
                 {processingId === leave.id ? '...' : 'Approve'}
               </Button>
               <Button
-                onClick={() => { setRejectingId(leave.id); setRejectionReason(''); setReasonError(''); }}
+                onClick={() => setSelectedLeaveToReject(leave)}
                 disabled={processingId === leave.id}
                 className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 px-4 py-2 rounded-lg text-sm font-medium"
               >
@@ -141,40 +137,15 @@ export default function ApprovalsPanel({ leaves, onAction }: ApprovalsPanelProps
               </Button>
             </div>
           </div>
-
-          {rejectingId === leave.id && (
-            <div className="mt-4 border-t border-gray-100 pt-4 space-y-2">
-              <label className="block text-sm font-medium text-gray-700">
-                Rejection reason <span className="text-gray-400 font-normal">(5–500 characters)</span>
-              </label>
-              <textarea
-                value={rejectionReason}
-                onChange={(e) => { setRejectionReason(e.target.value); setReasonError(''); }}
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-red-400 focus:border-transparent outline-none transition text-gray-900"
-                placeholder="Explain the reason for rejection..."
-              />
-              {reasonError && (
-                <p className="text-xs text-red-600">{reasonError}</p>
-              )}
-              <div className="flex gap-2">
-                <Button
-                  onClick={() => handleRejectSubmit(leave.id)}
-                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
-                >
-                  Confirm Rejection
-                </Button>
-                <Button
-                  onClick={() => { setRejectingId(null); setRejectionReason(''); setReasonError(''); }}
-                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium"
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          )}
         </div>
       ))}
+
+      <RejectionModal
+        isOpen={selectedLeaveToReject !== null}
+        onClose={() => setSelectedLeaveToReject(null)}
+        onSubmit={handleRejectSubmit}
+        leave={selectedLeaveToReject}
+      />
     </div>
   );
 }

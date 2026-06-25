@@ -169,9 +169,9 @@ export default function EmployeesPanel({ mode }: EmployeesPanelProps) {
       ? 'Add, view, promote, and manage all employee accounts'
       : 'View team members who report to you';
 
-  // Filter candidates for direct manager dropdown (must be manager or admin)
+  // Filter candidates for direct manager dropdown (must be manager)
   const managerCandidates = employees.filter(
-    (e: any) => e.role === 'manager' || e.role === 'admin'
+    (e: any) => e.role === 'manager'
   );
 
   // Dynamic Statistics
@@ -379,11 +379,13 @@ export default function EmployeesPanel({ mode }: EmployeesPanelProps) {
                   className="w-full text-black px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none bg-white transition"
                 >
                   <option value="">None</option>
-                  {employees.map((e: any) => (
-                    <option key={e.id} value={e.id}>
-                      {e.name} ({e.role} - {e.department || 'No department'})
-                    </option>
-                  ))}
+                  {employees
+                    .filter((e: any) => e.role !== 'admin')
+                    .map((e: any) => (
+                      <option key={e.id} value={e.id}>
+                        {e.name} ({e.role} - {e.department || 'No department'})
+                      </option>
+                    ))}
                 </select>
               </div>
             </div>
@@ -572,7 +574,7 @@ export default function EmployeesPanel({ mode }: EmployeesPanelProps) {
                   >
                     <option value="">None</option>
                     {employees
-                      .filter((e: any) => e.id !== editingEmployee.id)
+                      .filter((e: any) => e.id !== editingEmployee.id && e.role !== 'admin')
                       .map((e: any) => (
                         <option key={e.id} value={e.id}>
                           {e.name} ({e.role})

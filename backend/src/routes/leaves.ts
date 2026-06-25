@@ -99,17 +99,35 @@ router.get('/mine', authenticateToken, getMyLeaves);
 // MUST be registered before /:id to avoid route collision
 router.get('/pending-for-me', authenticateToken, async (req: AuthenticatedRequest, res: Response, next: any) => {
   try {
-    const userId = req.user!.id;
+    const { id: userId, role: userRole } = req.user!;
+    let result;
 
-    const result = await query(
-      `SELECT l.*, e.name AS employee_name, e.email AS employee_email
-       FROM leaves l
-       JOIN employees e ON l.employee_id = e.id
-       WHERE l.current_approver_id = $1
-         AND l.status = 'Pending'
-       ORDER BY l.created_at DESC`,
-      [userId]
-    );
+    if (userRole === 'admin') {
+      // Admins see:
+      // 1. Pending leaves of managers
+      // 2. Pending leaves where any admin is the current approver
+      result = await query(
+        `SELECT l.*, e.name AS employee_name, e.email AS employee_email
+         FROM leaves l
+         JOIN employees e ON l.employee_id = e.id
+         JOIN roles r ON e.role_id = r.id
+         WHERE l.status = 'Pending'
+           AND (r.name = 'manager' OR l.current_approver_id IN (
+             SELECT emp.id FROM employees emp JOIN roles ro ON emp.role_id = ro.id WHERE ro.name = 'admin'
+           ))
+         ORDER BY l.created_at DESC`
+      );
+    } else {
+      result = await query(
+        `SELECT l.*, e.name AS employee_name, e.email AS employee_email
+         FROM leaves l
+         JOIN employees e ON l.employee_id = e.id
+         WHERE l.current_approver_id = $1
+           AND l.status = 'Pending'
+         ORDER BY l.created_at DESC`,
+        [userId]
+      );
+    }
 
     res.json(result.rows);
   } catch (err) {
@@ -275,12 +293,12 @@ router.put('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Res
 
     const result = await client.query(
       `UPDATE leaves
-       SET status = $1,
+       SET status = $1::varchar,
            approved_by = $2,
            rejection_reason = $3,
            current_approver_id = $2,
-           approved_at = CASE WHEN $1 = 'Approved' THEN NOW() ELSE approved_at END,
-           rejected_at = CASE WHEN $1 = 'Rejected' THEN NOW() ELSE rejected_at END,
+           approved_at = CASE WHEN $1::varchar = 'Approved' THEN NOW() ELSE approved_at END,
+           rejected_at = CASE WHEN $1::varchar = 'Rejected' THEN NOW() ELSE rejected_at END,
            updated_at = NOW()
        WHERE id = $4
        RETURNING *`,

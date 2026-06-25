@@ -7,6 +7,7 @@ import { leaveAPI } from '@/lib/api';
 import { useLeaves } from '@/lib/hooks/useApi';
 import { formatDate, mapLeave } from '@/lib/utils/format';
 import { CheckSquare, X } from 'lucide-react';
+import RejectionModal from '@/components/RejectionModal';
 
 export default function ManagerApprovalsPage() {
   return (
@@ -19,6 +20,7 @@ export default function ManagerApprovalsPage() {
 function ApprovalsContent() {
   const { leaves: rawLeaves, isLoading, mutate } = useLeaves();
   const [processingId, setProcessingId] = useState<number | null>(null);
+  const [selectedLeaveToReject, setSelectedLeaveToReject] = useState<any | null>(null);
   const [error, setError] = useState('');
 
   const leaves = (rawLeaves ?? []).map((l: Record<string, unknown>) => mapLeave(l));
@@ -38,24 +40,24 @@ function ApprovalsContent() {
     }
   };
 
-  const handleReject = async (leaveId: number, rejectionReason: string) => {
-    if (!rejectionReason.trim() || rejectionReason.trim().length < 5) {
-      setError('Rejection reason must be at least 5 characters');
-      return;
-    }
+  const handleRejectSubmit = async (rejectionReason: string) => {
+    if (!selectedLeaveToReject) return;
+    const leaveId = selectedLeaveToReject.id;
 
     setProcessingId(leaveId);
     setError('');
     try {
       await leaveAPI.update(leaveId, {
         status: 'Rejected',
-        rejection_reason: rejectionReason.trim(),
+        rejection_reason: rejectionReason,
       });
       mutate();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to reject leave');
+      throw err; // propagates to RejectionModal error handler
     } finally {
       setProcessingId(null);
+      setSelectedLeaveToReject(null);
     }
   };
 
@@ -148,10 +150,7 @@ function ApprovalsContent() {
                           {processingId === leave.id ? '...' : 'Approve'}
                         </Button>
                         <Button
-                          onClick={() => {
-                            const reason = prompt('Enter rejection reason (min 5 characters):');
-                            if (reason) handleReject(leave.id, reason);
-                          }}
+                          onClick={() => setSelectedLeaveToReject(leave)}
                           disabled={processingId === leave.id}
                           className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 px-3 py-1.5 rounded-lg text-xs font-medium"
                         >
@@ -167,6 +166,13 @@ function ApprovalsContent() {
           </div>
         )}
       </div>
+
+      <RejectionModal
+        isOpen={selectedLeaveToReject !== null}
+        onClose={() => setSelectedLeaveToReject(null)}
+        onSubmit={handleRejectSubmit}
+        leave={selectedLeaveToReject}
+      />
     </div>
   );
 }

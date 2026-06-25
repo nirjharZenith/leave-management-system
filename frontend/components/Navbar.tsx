@@ -20,6 +20,7 @@ import { usePendingForMe } from '@/lib/hooks/useApi';
 const navItems = [
   { href: '/protected/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'manager', 'employee'] },
   { href: '/protected/apply-leave', label: 'Apply Leave', icon: CalendarPlus, roles: ['employee'] },
+  { href: '/protected/approvals', label: 'Approvals', icon: CheckSquare, roles: ['admin'] },
   { href: '/protected/manager/approvals', label: 'Approvals', icon: CheckSquare, roles: ['manager'] },
   { href: '/protected/admin/employees', label: 'Employees', icon: Users, roles: ['admin'] },
   { href: '/protected/admin/holidays', label: 'Holidays', icon: Calendar, roles: ['admin'] },
@@ -42,9 +43,9 @@ export default function Navbar() {
     user?.role ? item.roles.includes(user.role) : false
   );
 
-  // For non-manager roles (e.g. employees who are also reporting managers),
+  // For non-manager/non-admin roles (e.g. employees who are also reporting managers),
   // show Approvals link when they have pending items.
-  const showReportingManagerLinks = user?.role !== 'manager' && pendingCount > 0;
+  const showReportingManagerLinks = user?.role === 'employee' && pendingCount > 0;
 
   return (
     <nav className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-50">
@@ -64,6 +65,7 @@ export default function Navbar() {
               const Icon = item.icon;
               const isActive = pathname === item.href;
               const isManagerApprovals = item.href === '/protected/manager/approvals';
+              const isApprovals = item.href === '/protected/approvals';
               return (
                 <Link
                   key={item.href}
@@ -76,7 +78,7 @@ export default function Navbar() {
                 >
                   <Icon className="w-4 h-4" />
                   {item.label}
-                  {isManagerApprovals && pendingCount > 0 && (
+                  {(isManagerApprovals || isApprovals) && pendingCount > 0 && (
                     <span className="ml-1 inline-flex items-center justify-center w-5 h-5 text-xs font-bold bg-red-500 text-white rounded-full">
                       {pendingCount > 99 ? '99+' : pendingCount}
                     </span>
@@ -125,6 +127,7 @@ export default function Navbar() {
           const Icon = item.icon;
           const isActive = pathname === item.href;
           const isManagerApprovals = item.href === '/protected/manager/approvals';
+          const isApprovals = item.href === '/protected/approvals';
           return (
             <Link
               key={item.href}
@@ -137,7 +140,7 @@ export default function Navbar() {
             >
               <Icon className="w-3.5 h-3.5" />
               {item.label}
-              {isManagerApprovals && pendingCount > 0 && (
+              {(isManagerApprovals || isApprovals) && pendingCount > 0 && (
                 <span className="ml-1 inline-flex items-center justify-center w-5 h-5 text-xs font-bold bg-red-500 text-white rounded-full">
                   {pendingCount > 99 ? '99+' : pendingCount}
                 </span>

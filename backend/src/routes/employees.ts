@@ -288,11 +288,31 @@ router.post(
       let managerId = data.manager_id ?? null;
       let reportingManagerId = data.reporting_manager_id ?? null;
 
-      // Validate reporting_manager_id exists if provided
+      // Validate manager_id exists and is not an admin
+      if (managerId !== null) {
+        const mCheck = await query(
+          `SELECT r.name AS role_name FROM employees e JOIN roles r ON r.id = e.role_id WHERE e.id = $1`,
+          [managerId]
+        );
+        if (mCheck.rows.length === 0) {
+          return res.status(400).json({ error: 'Manager not found' });
+        }
+        if (mCheck.rows[0].role_name === 'admin') {
+          return res.status(400).json({ error: 'Cannot set an administrator as manager' });
+        }
+      }
+
+      // Validate reporting_manager_id exists and is not an admin
       if (reportingManagerId !== null) {
-        const rmCheck = await query('SELECT id FROM employees WHERE id = $1', [reportingManagerId]);
+        const rmCheck = await query(
+          `SELECT r.name AS role_name FROM employees e JOIN roles r ON r.id = e.role_id WHERE e.id = $1`,
+          [reportingManagerId]
+        );
         if (rmCheck.rows.length === 0) {
           return res.status(400).json({ error: 'Reporting manager not found' });
+        }
+        if (rmCheck.rows[0].role_name === 'admin') {
+          return res.status(400).json({ error: 'Cannot set an administrator as reporting manager' });
         }
       }
 
@@ -330,29 +350,68 @@ router.put(
 
       const data = updateEmployeeSchema.parse(req.body);
 
+      await client.query('BEGIN');
+
       // Validate manager_id if provided and non-null
       if (data.manager_id !== undefined && data.manager_id !== null) {
-        const mCheck = await client.query('SELECT id FROM employees WHERE id = $1', [data.manager_id]);
+        const mCheck = await client.query(
+          `SELECT r.name AS role_name FROM employees e JOIN roles r ON r.id = e.role_id WHERE e.id = $1`,
+          [data.manager_id]
+        );
         if (mCheck.rows.length === 0) {
+          await client.query('ROLLBACK');
           return res.status(400).json({ error: 'Manager not found' });
+        }
+        if (mCheck.rows[0].role_name === 'admin') {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'Cannot set an administrator as manager' });
         }
 
         const hasCycle = await wouldCreateManagerCycle(id, data.manager_id, client);
         if (hasCycle) {
+          await client.query('ROLLBACK');
           return res.status(400).json({ error: 'Circular manager relationship detected' });
         }
       }
 
       // Validate reporting_manager_id if provided and non-null
       if (data.reporting_manager_id !== undefined && data.reporting_manager_id !== null) {
-        const rmCheck = await client.query('SELECT id FROM employees WHERE id = $1', [data.reporting_manager_id]);
+        const rmCheck = await client.query(
+          `SELECT r.name AS role_name FROM employees e JOIN roles r ON r.id = e.role_id WHERE e.id = $1`,
+          [data.reporting_manager_id]
+        );
         if (rmCheck.rows.length === 0) {
+          await client.query('ROLLBACK');
           return res.status(400).json({ error: 'Reporting manager not found' });
+        }
+        if (rmCheck.rows[0].role_name === 'admin') {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'Cannot set an administrator as reporting manager' });
         }
 
         const hasCycle = await wouldCreateCycle(id, data.reporting_manager_id, client);
         if (hasCycle) {
+          await client.query('ROLLBACK');
           return res.status(400).json({ error: 'Circular reporting relationship detected' });
+        }
+      }
+
+      // Check if updating role to admin while employee is currently assigned as manager/reporting manager
+      let resolvedRoleId: number | undefined;
+      if (data.role_id !== undefined || data.role !== undefined) {
+        resolvedRoleId = await resolveRoleId(data.role, data.role_id);
+        const roleResult = await client.query('SELECT name FROM roles WHERE id = $1', [resolvedRoleId]);
+        if (roleResult.rows[0].name === 'admin') {
+          const assCheck = await client.query(
+            `SELECT COUNT(*)::int AS count FROM employees WHERE manager_id = $1 OR reporting_manager_id = $1`,
+            [id]
+          );
+          if (assCheck.rows[0].count > 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({
+              error: 'Cannot change role to administrator because this employee is currently assigned as a manager or reporting manager to other employees'
+            });
+          }
         }
       }
 
@@ -362,10 +421,9 @@ router.put(
 
       if (data.email !== undefined) { setClauses.push(`email = $${i++}`); values.push(data.email); }
       if (data.name !== undefined) { setClauses.push(`name = $${i++}`); values.push(data.name); }
-      if (data.role_id !== undefined || data.role !== undefined) {
-        const roleId = await resolveRoleId(data.role, data.role_id);
+      if (resolvedRoleId !== undefined) {
         setClauses.push(`role_id = $${i++}`);
-        values.push(roleId);
+        values.push(resolvedRoleId);
       }
       if (data.manager_id !== undefined) { setClauses.push(`manager_id = $${i++}`); values.push(data.manager_id); }
       if (data.department !== undefined) { setClauses.push(`department = $${i++}`); values.push(data.department); }
@@ -381,11 +439,14 @@ router.put(
       );
 
       if (result.rows.length === 0) {
+        await client.query('ROLLBACK');
         return res.status(404).json({ error: 'Employee not found' });
       }
 
+      await client.query('COMMIT');
       res.json(result.rows[0]);
     } catch (err) {
+      await client.query('ROLLBACK');
       next(err);
     } finally {
       client.release();
